@@ -1,0 +1,94 @@
+/*
+	The time depending on the size, mass, material and design of the contact system
+is from 0.5 to 2 ms with miniature reed switches and up to hundreds 
+of milliseconds with powerful contactors.
+ 
+Bounce is observed when opening electromechanical contacts.
+*/
+module Debounce_FPGA
+	#(
+		//parameter DEAD_TIME_US_RISE_EDGE=10,
+		//parameter DEAD_TIME_US_FALL_EDGE=10,
+		parameter DEAD_TIME_NUM_CLKS_RISE_EDGE=8,
+		parameter DEAD_TIME_NUM_CLKS_FALL_EDGE=6,
+		parameter CLOCK_FREQUENCY=50000000
+	)
+	(
+		input IN_SIGNAL,
+		input IN_CLOCK,
+		output OUT_DEBOUNCE_SIGNAL
+	);
+	//localparam CLOCK_PERIOD_NS=1000000000/CLOCK_FREQUENCY;
+	//localparam DEAD_TIME_NUM_CLKS_RISE_EDGE=DEAD_TIME_US_RISE_EDGE*1000/CLOCK_PERIOD_NS;
+	//localparam DEAD_TIME_NUM_CLKS_FALL_EDGE=DEAD_TIME_US_FALL_EDGE*1000/CLOCK_PERIOD_NS;
+	
+	reg REG_DEAD_TIME_RISE_EDGE_WAIT, REG_DEAD_TIME_FALL_EDGE_WAIT;
+	reg REG_SET_SIGNAL;
+	reg [$clog2(DEAD_TIME_NUM_CLKS_RISE_EDGE):0] REG_COUNT_DEAD_TIME_RISE_EDGE;
+	reg [$clog2(DEAD_TIME_NUM_CLKS_FALL_EDGE):0] REG_COUNT_DEAD_TIME_FALL_EDGE;
+	
+	assign OUT_DEBOUNCE_SIGNAL=REG_SET_SIGNAL;
+	
+	initial begin
+		REG_DEAD_TIME_RISE_EDGE_WAIT=0;
+		REG_DEAD_TIME_FALL_EDGE_WAIT=0;
+		REG_COUNT_DEAD_TIME_RISE_EDGE=0;
+		REG_COUNT_DEAD_TIME_FALL_EDGE=0;
+		REG_SET_SIGNAL=0;
+	end
+	
+	always @(posedge IN_SIGNAL or posedge IN_CLOCK)
+	begin
+		if(IN_SIGNAL)
+		begin
+			if(!REG_DEAD_TIME_RISE_EDGE_WAIT&&!REG_SET_SIGNAL)
+				REG_DEAD_TIME_RISE_EDGE_WAIT<=1;
+			else if (REG_DEAD_TIME_RISE_EDGE_WAIT&&!REG_SET_SIGNAL&&REG_COUNT_DEAD_TIME_RISE_EDGE==DEAD_TIME_NUM_CLKS_RISE_EDGE)
+					begin
+						REG_SET_SIGNAL<=1;
+						REG_DEAD_TIME_RISE_EDGE_WAIT<=0;
+					end
+					else if (REG_DEAD_TIME_FALL_EDGE_WAIT&&REG_SET_SIGNAL&&REG_COUNT_DEAD_TIME_FALL_EDGE==DEAD_TIME_NUM_CLKS_FALL_EDGE-1)
+						REG_DEAD_TIME_FALL_EDGE_WAIT<=0;
+		end
+		else
+		begin
+			if(REG_DEAD_TIME_RISE_EDGE_WAIT&&!REG_SET_SIGNAL&REG_COUNT_DEAD_TIME_RISE_EDGE==DEAD_TIME_NUM_CLKS_RISE_EDGE)
+				REG_DEAD_TIME_RISE_EDGE_WAIT<=0;//сигнал не ставим
+			else if (REG_SET_SIGNAL&&!REG_DEAD_TIME_FALL_EDGE_WAIT)
+						REG_DEAD_TIME_FALL_EDGE_WAIT<=1;
+					else if (REG_DEAD_TIME_FALL_EDGE_WAIT&&REG_SET_SIGNAL&&REG_COUNT_DEAD_TIME_FALL_EDGE==DEAD_TIME_NUM_CLKS_FALL_EDGE-1)
+							begin
+								REG_SET_SIGNAL<=0;
+								REG_DEAD_TIME_FALL_EDGE_WAIT<=0;
+							end
+					
+		end
+	end
+	always @(posedge IN_CLOCK)
+	begin
+		if(REG_DEAD_TIME_RISE_EDGE_WAIT)
+		begin
+			if(REG_COUNT_DEAD_TIME_RISE_EDGE<DEAD_TIME_NUM_CLKS_RISE_EDGE)
+				REG_COUNT_DEAD_TIME_RISE_EDGE<=REG_COUNT_DEAD_TIME_RISE_EDGE+1;
+		end
+		else 
+		begin
+			REG_COUNT_DEAD_TIME_RISE_EDGE<=0;
+		end
+	
+	end
+	always @(posedge IN_CLOCK)
+	begin
+		if(REG_DEAD_TIME_FALL_EDGE_WAIT)
+		begin
+			if(REG_COUNT_DEAD_TIME_FALL_EDGE<DEAD_TIME_NUM_CLKS_FALL_EDGE-1)
+				REG_COUNT_DEAD_TIME_FALL_EDGE<=REG_COUNT_DEAD_TIME_FALL_EDGE+1;
+		end
+		else 
+		begin
+			REG_COUNT_DEAD_TIME_FALL_EDGE<=0;
+		end
+	
+	end
+endmodule
